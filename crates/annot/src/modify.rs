@@ -13,8 +13,9 @@ use super::{AnnotError, Dict, Document, HashMap, HashSet, ObjRef, Object, PdfStr
 /// A comment another program drew, whose text the standard fonts can't draw. Redrawing it would
 /// replace those characters with `?`, so the edit is refused before the dictionary changes.
 pub(crate) fn refuse_foreign_text(doc: &Document, d: &Dict) -> Result<(), AnnotError> {
-    let drawn_elsewhere =
-        d.get(b"AP").is_some_and(|ap| doc.resolve(ap).as_dict().is_some_and(|ap| ap.contains(b"N"))) && pdfcraft_fonts::undrawn_mark(d).is_none();
+    let drawn_elsewhere = d.get(b"AP").is_some_and(|ap| doc.resolve(ap).as_dict().is_some_and(|ap| ap.contains(b"N")))
+        && pdfcraft_fonts::undrawn_mark(d).is_none()
+        && !matches!(d.get(b"GMUnicode"), Some(Object::Bool(true)));
     if drawn_elsewhere && let Some((what, c)) = appearance::undrawable_text(d) {
         return Err(AnnotError::Undrawable(format!(
             "PdfCraft can't redraw this comment: the standard fonts can't draw \"{}\" (U+{:04X}) in {what}, which would then show as ? (the comment was left as it is)",

@@ -2389,6 +2389,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "geomon-pdf"
+version = "0.1.0"
+dependencies = [
+ "pdfcraft-annot",
+ "pdfcraft-cos",
+ "pdfcraft-crypt",
+ "pdfcraft-engine",
+ "pdfcraft-model",
+ "pdfcraft-organize",
+ "pdfcraft-render",
+ "png 0.18.1",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "geomon-pdf-viewer"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "js-sys",
+ "pdfcraft-engine",
+ "pdfcraft-render",
+ "pdfcraft-testkit",
+ "pdfcraft-ui-egui",
+ "serde_json",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
 name = "gethostname"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

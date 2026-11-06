@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GeoMon PDF Viewer</title><style>html,body,canvas{margin:0;width:100%;height:100%;overflow:hidden;overscroll-behavior:none}#status{position:absolute;inset:40% 12%;font:14px system-ui;color:#475569}</style></head>
+<body><p id="status">Loading GeoMon PDF Viewer…</p><canvas id="geomon-pdf" aria-label="GeoMon PDF Viewer"></canvas><script type="module">
+import init from './geomon_pdf_viewer.js';
+// eframe focuses its hidden text input during startup. An embedded reader must
+// keep focus with the parent until the user enters this frame.
+const originalFocus = HTMLElement.prototype.focus;
+let pointerFocus = false;
+for (const type of ['pointerdown', 'mousedown', 'touchstart']) {
+    document.addEventListener(type, event => {
+        if (!event.isTrusted) return;
+        pointerFocus = true;
+        queueMicrotask(() => { pointerFocus = false; });
+    }, { capture: true, passive: true });
+}
+HTMLElement.prototype.focus = function(options) {
+    if (pointerFocus || document.hasFocus()) originalFocus.call(this, options);
+};
+// Middle-button pan must not start browser autoscroll or paste. pointerdown stays
+// untouched so eframe still receives the compatibility mouse events.
+for (const type of ['mousedown', 'auxclick']) {
+    document.addEventListener(type, event => {
+        if (event.button === 1) event.preventDefault();
+    }, { capture: true, passive: false });
+}
+const status=document.getElementById('status');
+if(window.parent===window){status.textContent='Open this viewer from a GeoMon project drawing.';}else{init().catch(()=>{status.textContent='The PDF viewer could not start. Check WebGL support and reload the drawing.';});}
+</script></body></html>

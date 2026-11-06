@@ -153,11 +153,40 @@ pub(crate) fn caret_snap(text: &PageText, vx: f32, vy: f32) -> Option<([f32; 2],
 /// The box for `text` at `size` with its displayed top-left corner at `at`, on a page turned by
 /// `rotation` (its `/Rotate`): on a quarter-turned page it is taller than wide in user space.
 pub fn text_box_rect(at: [f64; 2], text: &str, size: f64, rotation: i64) -> [f64; 4] {
-    use pdfcraft_engine::annot_text::{text_width, wrap};
-    let pad = 2.0;
-    let longest = text.lines().map(|l| text_width(l, size)).fold(0.0, f64::max);
-    let w = (longest + 2.0 * pad + 4.0).clamp(40.0, 300.0);
-    let lines = wrap(text, size, w - 2.0 * pad).len().max(1);
+    sized_text_box(at, text, size, rotation, 0.0, 300.0)
+}
+
+pub fn text_box_rect_on_page(page: &PageInfo, at: [f64; 2], text: &str, size: f64, border: f64) -> [f64; 4] {
+    let native_width = if page.rotation % 180 == 0 { page.crop[2] - page.crop[0] } else { page.crop[3] - page.crop[1] };
+    let x = page.user_to_view(at[0] as f32, at[1] as f32)[0];
+    let available = f64::from((page.width - x) * native_width / page.width.max(1.0));
+    sized_text_box(at, text, size, i64::from(page.rotation), border, available.clamp(40.0, 300.0))
+}
+
+fn sized_text_box(at: [f64; 2], text: &str, size: f64, rotation: i64, border: f64, max_width: f64) -> [f64; 4] {
+    use skrifa::{
+        FontRef, MetadataProvider,
+        instance::{LocationRef, Size},
+    };
+    let unicode = pdfcraft_fonts::first_undrawable(text)
+        .and_then(|_| pdfcraft_fonts::CRAFT_FONTS.iter().find(|face| face.covers("Hant") && pdfcraft_fonts::embedding::covers(face.bytes, text)))
+        .and_then(|face| FontRef::new(face.bytes).ok());
+    let measure = |line: &str, size: f64| {
+        unicode.as_ref().map_or_else(
+            || pdfcraft_fonts::helvetica_width(line, size),
+            |font| {
+                let metrics = font.metrics(Size::unscaled(), LocationRef::default());
+                let advances = font.glyph_metrics(Size::unscaled(), LocationRef::default());
+                let width: f64 =
+                    line.chars().filter_map(|c| font.charmap().map(c).and_then(|glyph| advances.advance_width(glyph))).map(f64::from).sum();
+                width * size / f64::from(metrics.units_per_em.max(1))
+            },
+        )
+    };
+    let pad = 2.0 + border.max(0.0);
+    let longest = text.lines().map(|line| measure(line, size)).fold(0.0, f64::max);
+    let w = (longest + 2.0 * pad + 4.0).clamp(40.0, max_width);
+    let lines = pdfcraft_fonts::wrap_with(text, size, (w - 2.0 * pad).max(1.0), measure).len().max(1);
     let h = lines as f64 * size * 1.2 + 2.0 * pad + 2.0;
     pdfcraft_engine::text_box_at(rotation, at, w, h).unwrap_or([at[0], at[1] - h, at[0] + w, at[1]])
 }

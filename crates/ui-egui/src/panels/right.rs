@@ -35,7 +35,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
         let a11y = &mut app.a11y;
         let tags_state = &mut app.tags_state;
         let compare = &app.compare;
-        let comment_allowed = doc.allows_annotation();
+        let comment_allowed = doc.allows_annotation() && app.hosted.as_ref().is_none_or(|h| h.editable());
         // A dialog or the palette owns the keyboard: the panel leaves Escape to it.
         let modal = app.dialog.is_some() || app.palette_open;
         egui::Frame::NONE

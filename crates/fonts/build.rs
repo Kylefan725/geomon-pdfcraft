@@ -104,7 +104,7 @@ fn manifest(dir: &std::path::Path, manifest: &std::path::Path, wasm: bool, stric
         let hebrew = scripts.split(',').any(|s| s.trim() == "Hebr");
         // Devanagari too, for the Hindi interface (one small face).
         let devanagari = scripts.split(',').any(|s| s.trim() == "Deva");
-        let web_face = (*family == "BIZ UDPGothic" && *style == "Regular")
+        let web_face = (*family == "Noto Sans CJK HK" && *style == "Regular") || (*family == "BIZ UDPGothic" && *style == "Regular")
             || arabic
             || telugu
             || hebrew

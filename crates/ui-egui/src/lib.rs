@@ -242,7 +242,10 @@ struct PendingOpen {
     display_override: Option<(canvas::PageLayout, bool)>,
 }
 
+pub mod hosted;
+
 pub struct PdfCraftApp {
+    pub hosted: Option<hosted::Hosted>,
     /// Tools side and pane widths; which panes are open is `left_open` and `right`.
     pub side_panels: side_panels::SidePanels,
     pub session: Session,

@@ -79,6 +79,7 @@ impl PdfCraftApp {
     /// Whether a registered command can run now. The engine judges the document (security,
     /// contents, undo history); view state it can't see is checked here.
     pub(crate) fn command_enabled(&self, spec: &CommandSpec) -> bool {
+        if !self.hosted_command_allowed(spec.id) { return false; }
         // Undo and Redo act on the Combine files list while its tab shows.
         if self.combine_showing() && matches!(spec.needs, commands::Needs::Undo | commands::Needs::Redo) {
             return self.combine_can_undo(spec.needs == commands::Needs::Undo);
@@ -421,7 +422,11 @@ impl PdfCraftApp {
                 if let Some(v) = active.and_then(|i| self.views.get_mut(i)) {
                     v.organize = false;
                 }
-                self.notify_tr("Drag a rectangle on a page to crop it; double-click a page for Set Page Boxes");
+                if self.hosted.is_some() {
+                    self.notify(if self.language == "zh-hant" { "拖曳矩形以裁剪 PDF 頁面，修改會儲存為新草稿。" } else { "Drag a rectangle to crop the PDF page. Save the change as a new draft." });
+                } else {
+                    self.notify_tr("Drag a rectangle on a page to crop it; double-click a page for Set Page Boxes");
+                }
             }
             "page.boxes" => {
                 self.boxes_draft.seeded = None;

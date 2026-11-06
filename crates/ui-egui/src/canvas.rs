@@ -272,6 +272,7 @@ pub(crate) fn snapshot_tab_name(title: &str, file_name: &str, snapshot: &Snapsho
 }
 
 pub struct DocView {
+    pub(crate) hosted: bool,
     pub id: DocId,
     pub zoom: f32,
     pub fit: Fit,
@@ -610,6 +611,7 @@ impl DocView {
     pub fn new(id: DocId, info: &DocInfo, defaults: ViewDefaults) -> Self {
         Self {
             id,
+            hosted: false,
             zoom: defaults.zoom,
             fit: defaults.fit,
             layout: defaults.layout,
@@ -782,6 +784,7 @@ impl DocView {
         fresh.continuous = self.continuous;
         fresh.show_page_gaps = self.show_page_gaps;
         fresh.rotation = self.rotation;
+        fresh.hosted = self.hosted;
         fresh.current = self.current;
         fresh.organize = self.organize;
         fresh.grid_zoom = self.grid_zoom;
@@ -3038,13 +3041,13 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     // Security, stay as they are.
     let secured = show_secured_notice && doc.security_summary().is_some_and(|s| !(s.owner || (s.permissions.modify() && s.permissions.assemble())));
     let repaired = !doc.repair_log().is_empty();
-    let notice = notices(view, doc, secured, repaired, crate::sign_ui::banner(&doc.signatures), ui, &t);
+    let notice = if app.hosted.is_none() { notices(view, doc, secured, repaired, crate::sign_ui::banner(&doc.signatures), ui, &t) } else { None };
     apply_notice(app, index, notice);
     let Some(doc) = app.session.get(app.views[index].id) else { return };
     let info = &doc.info;
     // No dialog, close prompt or palette over the page: only then does page input count.
     let modal = app.modal_open();
-    let unobstructed = !modal && !app.palette_open;
+    let unobstructed = !modal && !app.palette_open && !app.hosted.as_ref().is_some_and(|h| h.capturing());
     let organize_zoom = app.organize_zoom;
     let view = &mut app.views[index];
     if view.organize {
@@ -3132,13 +3135,13 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     let prefs = &app.comment_prefs;
     let redact_mark = (app.redact_prefs.hover_fill, app.redact_prefs.opacity);
     let units = app.units;
-    let allowed = doc.allows_annotation();
+    let allowed = doc.allows_annotation() && app.hosted.as_ref().is_none_or(|h| h.editable());
     let can_copy = doc.allows_copying();
     let comments_hidden = doc.comments_hidden();
     let form = doc.form.clone();
     let generation = doc.edit_generation();
-    let can_fill = doc.allows_form_filling();
-    let can_crop = doc.allows_assembly();
+    let can_fill = doc.allows_form_filling() && app.hosted.is_none();
+    let can_crop = doc.allows_assembly() && app.hosted.as_ref().is_none_or(|h| h.editable());
     let signature = app.signature.clone();
     let initials = app.initials.clone();
     let author = app.comment_prefs.author.clone();
@@ -3153,7 +3156,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     let mut open_props: Option<(usize, usize)> = None;
     // The table being set up in its window, shown on its own document's page.
     let table_preview = app.field_table_draft.as_mut().filter(|d| d.doc == view.id).and_then(|d| Some(d.preview(info.pages.get(d.page)?, &form)));
-    let can_modify = doc.allows_modification();
+    let can_modify = doc.allows_modification() && app.hosted.is_none();
     if preparing {
         crate::prepare::after_refresh(view, &form);
     } else {
@@ -3485,10 +3488,10 @@ fn apply_frame_requests(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui, 
     }
     // Read mode hides the tools (#2646), and full screen is the page and nothing else (#1459);
     // the quick tools come back with the window.
-    if app.mode != crate::Mode::Read && !app.full_screen {
+    if app.hosted.is_none() && app.mode != crate::Mode::Read && !app.full_screen {
         quick_bar(app, avail, ui);
     }
-    if let Some((source, file, destination)) = remote_open {
+    if app.hosted.is_none() && let Some((source, file, destination)) = remote_open {
         app.open_remote_link(source, file, destination);
     }
 }

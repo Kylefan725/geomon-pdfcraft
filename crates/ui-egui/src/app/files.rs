@@ -72,11 +72,13 @@ impl PdfCraftApp {
 
     /// Open a document and make it the active tab. Encrypted files raise the password prompt.
     pub fn open_bytes(&mut self, name: &str, path: Option<String>, bytes: Vec<u8>) -> Result<(), String> {
+        if self.hosted.is_some() { return Err("Open drawings through the GeoMon project.".into()); }
         self.startup_superseded = true;
         self.open_bytes_with_focus(name, path, bytes, true)
     }
 
     pub(super) fn open_bytes_with_focus(&mut self, name: &str, path: Option<String>, bytes: Vec<u8>, activate: bool) -> Result<(), String> {
+        if self.hosted.is_some() { return Err("Open drawings through the GeoMon project.".into()); }
         // Images and text files become new, unsaved PDFs (Create a PDF).
         let active = self.active;
         if let Some(r) = self.open_converted(name, &bytes) {
@@ -381,6 +383,7 @@ impl PdfCraftApp {
 
     /// Save an attachment to disk, or open a PDF attachment in a new tab.
     pub fn attachment_action(&mut self, doc: DocId, index: usize, open: bool) {
+        if self.hosted.is_some() { return; }
         let Some(d) = self.session.get(doc) else { return };
         let Some(att) = d.info.attachments.get(index).cloned() else { return };
         let data = pdfcraft_render::attachment_data(&d.bytes, d.password.as_deref(), &att);
@@ -410,6 +413,7 @@ impl PdfCraftApp {
 
     /// [`Self::attachment_action`] for the file of the attachment comment at (page, index).
     pub fn comment_attachment_action(&mut self, doc: DocId, page: usize, index: usize, open: bool) {
+        if self.hosted.is_some() { return; }
         let source = pdfcraft_render::AttachmentSource::Annotation { page, index };
         // The menus offer the items only for a listed file, so a miss is a comment gone since.
         if let Some(i) = self.session.get(doc).and_then(|d| d.info.attachments.iter().position(|a| a.source == source)) {
@@ -708,6 +712,7 @@ impl PdfCraftApp {
     }
 
     pub fn open_dialog(&mut self) {
+        if self.hosted.is_some() { return; }
         self.startup_superseded = true;
         #[cfg(not(target_arch = "wasm32"))]
         self.pick(

@@ -42,7 +42,7 @@ impl PdfCraftApp {
         let mark = if dirty { " •" } else { "" };
         let titled = |name: Option<String>| {
             name.or_else(|| self.combine_showing().then(|| tl!("Combine files").to_owned()))
-                .map_or_else(|| "PdfCraft".to_owned(), |name| format!("{name}{mark} — PdfCraft"))
+                .map_or_else(|| "GeoMon PDF Viewer".to_owned(), |name| format!("{name}{mark} — GeoMon PDF Viewer"))
         };
         let title = titled(self.active.and_then(|i| crate::canvas::tab_label(self, i)));
         // The web page's title is what an embedding host reads to tell which file opened, so it
@@ -65,6 +65,7 @@ impl PdfCraftApp {
     /// Construct an application with the default session, panels, theme and control state.
     pub fn new() -> Self {
         Self {
+            hosted: None,
             session: Session::new(),
             views: Vec::new(),
             closed_tabs: Vec::new(),
@@ -367,6 +368,7 @@ impl eframe::App for PdfCraftApp {
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
         // The button's release a window move or resize kept from egui.
         window_controls::release_after_desktop_grab(ctx, raw);
+        if self.hosted.is_some() { raw.dropped_files.clear(); raw.hovered_files.clear(); }
         self.prepare_raw_input(ctx, raw);
         if raw.hovered_files.is_empty() && raw.dropped_files.is_empty() {
             return;
@@ -384,13 +386,14 @@ impl eframe::App for PdfCraftApp {
             let minimized = self.ctx.as_ref().is_some_and(|c| c.input(|i| i.viewport().minimized == Some(true)));
             self.window_state.keep(storage, minimized);
         }
-        storage.set_string("pdfcraft", self.persist());
+        if self.hosted.is_none() { storage.set_string("pdfcraft", self.persist()); }
     }
 
     /// Each frame's work before drawing: opens, operating-system and control-channel requests,
     /// the quit guard, shortcuts, and the background jobs' results.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.ctx = Some(ctx.clone());
+        self.hosted_tick();
         #[cfg(not(target_arch = "wasm32"))]
         self.window_state.repair(ctx);
         self.dialog_epoch();
@@ -514,7 +517,7 @@ impl eframe::App for PdfCraftApp {
         // macOS: quit through `terminate:` instead of dropping the window (Touch Bar crash, #1136).
         #[cfg(target_os = "macos")]
         craft_quit::on_close_request(ctx);
-        self.autosave_tick(ctx, web_time::Instant::now());
+        if self.hosted.is_none() { self.autosave_tick(ctx, web_time::Instant::now()); }
         // Reload documents whose files a build rewrote (#431).
         #[cfg(not(target_arch = "wasm32"))]
         self.watch_files();
@@ -555,7 +558,7 @@ impl eframe::App for PdfCraftApp {
             }
         }
         self.poll_export();
-        self.auto_ocr_scanned_page();
+        if self.hosted.is_none() { self.auto_ocr_scanned_page(); }
         self.poll_ocr();
         self.poll_optimize();
         self.poll_action();
@@ -589,6 +592,7 @@ impl eframe::App for PdfCraftApp {
         // The accessible window takes the same name, so a screen reader (AT-SPI on Linux, UIA on
         // Windows) can tell it apart (#4614). egui builds the root node afresh every pass.
         ctx.accesskit_node_builder(egui::accesskit_root_id(), |root| root.set_label(self.window_title.as_str()));
+        if self.hosted.is_some() { self.hosted_ui(ui); return; }
         if self.full_screen && self.active.is_some() {
             // Full screen: the page on black, nothing else, as Acrobat's Full Screen Mode (Esc
             // or ⌘L to leave).

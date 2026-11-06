@@ -110,6 +110,7 @@ fn form_edit_pages(
 impl PdfCraftApp {
     /// Apply an edit to the active document. Returns `true` on success; failures are shown.
     pub fn apply_edit(&mut self, edit: Edit) -> bool {
+        if !self.hosted_edit_allowed(&edit) { return false; }
         let Some((i, id)) = self.active_ids() else { return false };
         let label = edit.label();
         let (form_before, page_count_before, had_xfa) = if let Some(d) = self.session.get(id) {
@@ -283,6 +284,7 @@ impl PdfCraftApp {
     }
 
     fn history_step(&mut self, undo: bool) {
+        if self.hosted.as_ref().is_some_and(|h| !h.editable()) { return; }
         let Some((i, id)) = self.active_ids() else { return };
         if !self.close_text_editors(i, id) {
             return;
@@ -774,6 +776,7 @@ impl PdfCraftApp {
         let Some(v) = self.views.get(index) else { return false };
         let Some(doc) = self.session.get(v.id) else { return false };
         doc.dirty
+            || (self.hosted.is_some() && self.hosted_review_draft(index))
             || v.pending_edit.is_some()
             || v.content.blocked().is_some()
             || v.forms.focus.as_ref().is_some_and(|f| crate::forms_ui::draft_edit(f, &doc.form).is_some())

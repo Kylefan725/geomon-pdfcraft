@@ -9,6 +9,7 @@ use super::{
 /// menus as in the Attachments panel: the comment is where the reader finds its file. Reading
 /// the file changes nothing, so a read-only document offers them too.
 pub(crate) fn attachment_items(ui: &mut egui::Ui, view: &mut DocView, info: &DocInfo, a: &Annotation) {
+    if view.hosted { return; }
     let source = pdfcraft_render::AttachmentSource::Annotation { page: a.page, index: a.index };
     let Some(file) = info.attachments.iter().find(|f| f.source == source) else { return };
     if ui.button(tl!("Save attachment…")).clicked() {

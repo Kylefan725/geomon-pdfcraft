@@ -33,7 +33,11 @@ pub(crate) fn redraw_or_restore(doc: &mut Document, r: ObjRef, before: Dict) -> 
 pub(crate) fn draw_appearance(doc: &mut Document, r: ObjRef) -> Result<(), AnnotError> {
     let d = annot_dict(doc, r);
     let subtype = String::from_utf8_lossy(d.name(b"Subtype").unwrap_or_default()).into_owned();
-    let Some(stream) = build_appearance(doc, &d) else { return Err(AnnotError::Unsupported(subtype)) };
+    let stream = if d.name(b"Subtype") == Some(b"FreeText") && appearance::undrawable_text(&d).is_some() {
+        appearance::build_unicode_free_text(doc, &d)?
+    } else {
+        build_appearance(doc, &d).ok_or(AnnotError::Unsupported(subtype))?
+    };
     apply_appearance(doc, r, &d, stream)
 }
 
@@ -59,7 +63,8 @@ fn build_appearance(doc: &Document, d: &Dict) -> Option<Stream> {
 /// Store a built appearance on the annotation: the cheap half of [`set_appearance`].
 fn apply_appearance(doc: &mut Document, r: ObjRef, d: &Dict, stream: Stream) -> Result<(), AnnotError> {
     // Characters the standard fonts can't draw came out as `?`: mark the annotation with the first.
-    let missing = appearance::undrawable_text(d).map(|(_, c)| c);
+    let unicode = matches!(stream.dict.get(b"GMUnicode"), Some(Object::Bool(true)));
+    let missing = if unicode { None } else { appearance::undrawable_text(d).map(|(_, c)| c) };
     let ap = doc.add(Object::Stream(stream));
     // A copy (a shared /AP is left alone) that keeps unknown entries; the old down and rollover
     // appearances would show the previous look on press or hover, so they go with the old /N.
@@ -85,6 +90,11 @@ fn apply_appearance(doc: &mut Document, r: ObjRef, d: &Dict, stream: Stream) -> 
         }
         d.remove(b"AS");
         pdfcraft_fonts::set_undrawn_mark(d, missing);
+        if unicode {
+            d.set(b"GMUnicode".to_vec(), Object::Bool(true));
+        } else {
+            d.remove(b"GMUnicode");
+        }
     })?;
     Ok(())
 }

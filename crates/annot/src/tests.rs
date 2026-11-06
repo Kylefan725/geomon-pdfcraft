@@ -1393,21 +1393,16 @@ fn drawings_resize_by_scaling_their_strokes() {
     assert!(matches!(set_rect(&mut doc, 0, i, [100.0, 400.0, 101.0, 401.0], &meta("")), Err(AnnotError::Invalid(_))));
 }
 
-/// Comment text the standard fonts can't draw is kept, as Acrobat keeps it: a text box, Fill & Sign
-/// text or a dynamic stamp's by-line is added with its text as typed, its appearance draws `?` for
-/// those characters, and the comment is marked with the first one (cleared once all of it can be
-/// drawn). A comment another program drew with a font that has those characters keeps that
-/// appearance: a restyle is refused rather than replace it with `?`, while new text is taken.
 #[test]
-fn comment_text_the_standard_fonts_cannot_draw_is_kept_and_marked() {
+fn chinese_comment_text_uses_bundled_font_and_preserves_foreign_appearances() {
     let mut doc = fixture();
     let mark = |doc: &Document, i: usize| pdfcraft_fonts::undrawn_mark(&list(doc, 0)[i]);
     let mut boxed = new(0, Shape::TextBox { rect: [100.0, 600.0, 300.0, 650.0], font_size: 12.0 });
     boxed.contents = "签名 Ada".into();
     let t = add_annotation(&mut doc, &boxed, &meta("t")).unwrap();
     assert_eq!(text(&list(&doc, 0)[t], b"Contents"), "签名 Ada");
-    assert!(ap_content(&doc, &list(&doc, 0)[t]).contains("(?? Ada)"), "{}", ap_content(&doc, &list(&doc, 0)[t]));
-    assert_eq!(mark(&doc, t), Some('签'));
+    assert!(matches!(list(&doc, 0)[t].get(b"GMUnicode"), Some(Object::Bool(true))));
+    assert_eq!(mark(&doc, t), None);
     let typed = Shape::Typewriter { rect: [100.0, 700.0, 200.0, 716.0], font_size: 11.0 };
     let f = add_annotation(
         &mut doc,
@@ -1415,7 +1410,7 @@ fn comment_text_the_standard_fonts_cannot_draw_is_kept_and_marked() {
         &meta("x"),
     )
     .unwrap();
-    assert_eq!(mark(&doc, f), Some('张'));
+    assert_eq!(mark(&doc, f), None);
     let stamp =
         Shape::Stamp { rect: [100.0, 100.0, 260.0, 142.0], stamp: StampKind::DynApproved, by: Some("By 张三 at 2:14 pm, Oct 02, 2026".into()) };
     let s = add_annotation(
@@ -1425,13 +1420,12 @@ fn comment_text_the_standard_fonts_cannot_draw_is_kept_and_marked() {
     )
     .unwrap();
     assert_eq!(mark(&doc, s), Some('张'));
-    // Our own `?` appearance is redrawn on a restyle; Western European text clears the mark.
     set_style(&mut doc, 0, t, StyleChange::new(Some([1.0, 0.0, 0.0]), None, None, None), &meta("")).unwrap();
-    assert_eq!(mark(&doc, t), Some('签'));
+    assert_eq!(mark(&doc, t), None);
     set_contents(&mut doc, 0, t, "Zürich —\nGenève", &meta("")).unwrap();
     assert_eq!(mark(&doc, t), None);
     set_contents(&mut doc, 0, t, "签名", &meta("")).unwrap();
-    assert_eq!((text(&list(&doc, 0)[t], b"Contents").as_str(), mark(&doc, t)), ("签名", Some('签')));
+    assert_eq!((text(&list(&doc, 0)[t], b"Contents").as_str(), mark(&doc, t)), ("签名", None));
     // A text box another program drew (with a font that has 欢): a restyle keeps that appearance.
     let mut foreign = Dict::new();
     foreign.set(b"Type".to_vec(), Object::name("Annot"));
@@ -1460,10 +1454,8 @@ fn comment_text_the_standard_fonts_cannot_draw_is_kept_and_marked() {
     let err = set_rect(&mut doc, 0, k, [40.0, 40.0, 180.0, 90.0], &meta("")).unwrap_err();
     assert!(matches!(&err, AnnotError::Undrawable(_)), "{err:?}");
     assert_eq!(list(&doc, 0)[k], before, "a refused resize keeps the rectangle");
-    // New text from the user is taken (and marked), as for any comment.
     set_contents(&mut doc, 0, k, "欢迎光临", &meta("")).unwrap();
-    assert_eq!(mark(&doc, k), Some('欢'));
-    // One without an appearance is shown in the display copy only; drawing it marks it.
+    assert_eq!(mark(&doc, k), None);
     let mut bare = Dict::new();
     bare.set(b"Type".to_vec(), Object::name("Annot"));
     bare.set(b"Subtype".to_vec(), Object::name("FreeText"));
@@ -1478,7 +1470,7 @@ fn comment_text_the_standard_fonts_cannot_draw_is_kept_and_marked() {
     assert!(shown.get(b).as_dict().unwrap().contains(b"AP"), "displayed anyway");
     assert!(!doc.get(b).as_dict().unwrap().contains(b"AP"), "the document itself is unchanged");
     set_appearance(&mut doc, b).unwrap();
-    assert_eq!(doc.get(b).as_dict().and_then(pdfcraft_fonts::undrawn_mark), Some('欢'));
+    assert_eq!(doc.get(b).as_dict().and_then(pdfcraft_fonts::undrawn_mark), None);
     // Kept through a save.
     let doc = reopen(&doc);
     assert_eq!(text(&list(&doc, 0)[t], b"Contents"), "签名");

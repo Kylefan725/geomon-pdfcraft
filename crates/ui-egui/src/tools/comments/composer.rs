@@ -1,4 +1,4 @@
-use super::geometry::{drawn_text_box_rect, page_rotation, text_box_rect};
+use super::geometry::{drawn_text_box_rect, page_rotation, text_box_rect, text_box_rect_on_page};
 use super::paint::{edited_in_view, new_comment};
 use super::state::{ComposerKind, PageCx};
 use super::{
@@ -124,6 +124,7 @@ pub(crate) fn composer(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, 
             let border = prefs.style(CommentTool::TextBox).width;
             let rect = match (size, info.pages.get(page)) {
                 (Some(size), Some(p)) => drawn_text_box_rect(p, c.at, size, &text, 12.0, border),
+                (None, Some(p)) => text_box_rect_on_page(p, c.at, &text, 12.0, border),
                 _ => text_box_rect(c.at, &text, 12.0, rotation),
             };
             Some(new_comment(&cx, CommentTool::TextBox, Shape::TextBox { rect, font_size: 12.0 }, text))

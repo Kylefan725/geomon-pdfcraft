@@ -10,7 +10,7 @@
 //! Helvetica font with WinAnsi encoding; line breaking uses [`text_width`], an approximation of
 //! Helvetica's proportions by character class (no font program or metrics file is bundled).
 
-use pdfcraft_cos::{Dict, Object, PdfString, Stream};
+use pdfcraft_cos::{Dict, Document, Object, PdfString, Stream};
 use pdfcraft_fonts::{first_undrawable, literal, win_ansi};
 pub use pdfcraft_fonts::{helvetica_width as text_width, wrap};
 
@@ -412,7 +412,7 @@ pub fn build(d: &Dict) -> Option<Stream> {
         b"Text" => return draw_icon(&context, "Note", [1.0, 0.82, 0.0], drawing),
         b"FileAttachment" => return draw_icon(&context, "PushPin", [0.0, 0.47, 0.84], drawing),
         b"Stamp" => return draw_stamp(&context, drawing),
-        b"FreeText" => return draw_free_text(&context, drawing),
+        b"FreeText" => return draw_free_text(&context, drawing, None),
         _ => {}
     }
     let mut drawing = drawing;
@@ -889,7 +889,52 @@ fn draw_stamp(context: &AppearanceContext<'_>, mut drawing: AppearanceDrawing) -
     Some(form(rect, c.as_bytes(), res))
 }
 
-fn draw_free_text(context: &AppearanceContext<'_>, mut drawing: AppearanceDrawing) -> Option<Stream> {
+struct UnicodeFont {
+    resource: String,
+    fonts: Dict,
+    metrics: pdfcraft_fonts::pdf::Metrics,
+}
+
+impl UnicodeFont {
+    fn width(&self, text: &str, size: f64) -> f64 {
+        self.metrics
+            .encode(text)
+            .map_or(f64::INFINITY, |encoded| self.metrics.codes(&encoded).into_iter().map(|(code, _)| self.metrics.width(code)).sum::<f64>() * size)
+    }
+}
+
+pub(crate) fn build_unicode_free_text(doc: &mut Document, d: &Dict) -> Result<Stream, crate::AnnotError> {
+    let text = d.get(b"Contents").and_then(Object::as_string).map(PdfString::to_text).unwrap_or_default();
+    let face = pdfcraft_fonts::CRAFT_FONTS
+        .iter()
+        .find(|face| face.covers("Hant") && pdfcraft_fonts::embedding::covers(face.bytes, &text))
+        .ok_or_else(|| crate::AnnotError::Undrawable("The bundled drawing font cannot display every character in this note.".into()))?;
+    let mut fonts = d
+        .get(b"AP")
+        .and_then(|ap| doc.dict(ap))
+        .and_then(|ap| ap.get(b"N").map(|normal| doc.resolve(normal)))
+        .and_then(|normal| match normal.as_ref() {
+            Object::Stream(stream) => stream.dict.get(b"Resources").and_then(|r| doc.dict(r)),
+            _ => None,
+        })
+        .and_then(|resources| resources.get(b"Font").and_then(|font| doc.dict(font)))
+        .unwrap_or_default();
+    let resource = pdfcraft_fonts::embedding::embed(doc, &mut fonts, face.bytes, face.family).map_err(crate::AnnotError::Undrawable)?;
+    let font = fonts
+        .get(resource.as_bytes())
+        .and_then(|font| doc.dict(font))
+        .ok_or_else(|| crate::AnnotError::Undrawable("The drawing note font could not be embedded.".into()))?;
+    let metrics = pdfcraft_fonts::pdf::Metrics::from_dict(doc, &font);
+    let single_line: String = text.chars().filter(|c| !matches!(c, '\n' | '\r')).collect();
+    if metrics.encode(&single_line).is_none() {
+        return Err(crate::AnnotError::Undrawable("The drawing note font cannot encode this text.".into()));
+    }
+    let font = UnicodeFont { resource, fonts, metrics };
+    let context = appearance_context(d).ok_or_else(|| crate::AnnotError::Unsupported("FreeText".into()))?;
+    draw_free_text(&context, AppearanceDrawing::new(&context), Some(&font)).ok_or_else(|| crate::AnnotError::Unsupported("FreeText".into()))
+}
+
+fn draw_free_text(context: &AppearanceContext<'_>, mut drawing: AppearanceDrawing, unicode: Option<&UnicodeFont>) -> Option<Stream> {
     let d = context.dict;
     let rect = context.rect;
     let stroke = context.stroke;
@@ -965,34 +1010,43 @@ fn draw_free_text(context: &AppearanceContext<'_>, mut drawing: AppearanceDrawin
     let width = (rect[2] - rect[0] - 2.0 * pad).max(1.0);
     let q = d.int(b"Q").unwrap_or(0);
     c.push_str(&format!(
-        "{} {} {} {} re W n\nBT\n/Helv {} Tf\n{}",
+        "{} {} {} {} re W n\nBT\n/{} {} Tf\n{}",
         n(rect[0]),
         n(rect[1]),
         n(rect[2] - rect[0]),
         n(rect[3] - rect[1]),
+        unicode.map_or("Helv", |font| font.resource.as_str()),
         n(size),
         rg(text_color)
     ));
     let mut out = c.into_bytes();
     let mut y = rect[3] - pad - size * 0.9;
-    for line in wrap(&text, size, width) {
+    let measure = |value: &str, size: f64| unicode.map_or_else(|| text_width(value, size), |font| font.width(value, size));
+    for line in pdfcraft_fonts::wrap_with(&text, size, width, measure) {
         if y < rect[1] - size {
             break;
         }
-        let lw = text_width(&line, size);
+        let lw = measure(&line, size);
         let x = match q {
             1 => rect[0] + pad + (width - lw) / 2.0,
             2 => rect[2] - pad - lw,
             _ => rect[0] + pad,
         };
         out.extend(format!("1 0 0 1 {} {} Tm ", n(x), n(y)).bytes());
-        out.extend(literal(&win_ansi(&line)));
+        let encoded = match unicode {
+            Some(font) => font.metrics.encode(&line)?,
+            None => win_ansi(&line),
+        };
+        out.extend(literal(&encoded));
         out.extend_from_slice(b" Tj\n");
         y -= size * 1.2;
     }
     out.extend_from_slice(b"ET\n");
-    res.set(b"Font".to_vec(), helvetica_resource());
+    res.set(b"Font".to_vec(), unicode.map_or_else(helvetica_resource, |font| Object::Dict(font.fonts.clone())));
     let mut stream = form(full, &out, res);
+    if unicode.is_some() {
+        stream.dict.set(b"GMUnicode".to_vec(), Object::Bool(true));
+    }
     if let Some(m) = matrix {
         stream.dict.set(b"Matrix".to_vec(), Object::Array(m.iter().copied().map(Object::Real).collect()));
     }
