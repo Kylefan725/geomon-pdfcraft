@@ -56,7 +56,7 @@ fn automatic_text_boxes_contain_rendered_latin_and_chinese_text() {
                 }
                 let pixels = renderer.render(RenderRequest { page: 0, scale: 0.5, ..RenderRequest::default() });
                 assert!(pixels.error.is_none(), "{:?}", pixels.error);
-                assert!(pixels.rgba.chunks_exact(4).any(|pixel| pixel[3] > 0));
+                assert!(pixels.rgba.as_chunks::<4>().0.iter().any(|[_, _, _, alpha]| *alpha > 0));
             }
         }
     }

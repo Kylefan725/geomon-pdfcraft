@@ -244,11 +244,8 @@ pub fn render(
     }
     let mut pixels = rendered.rgba.to_vec();
     // PDFCraft supplies premultiplied RGBA; PNG stores straight-alpha colour.
-    for pixel in pixels.chunks_exact_mut(4) {
-        if let [r, g, b, alpha] = pixel
-            && *alpha > 0
-            && *alpha < 255
-        {
+    for [r, g, b, alpha] in pixels.as_chunks_mut::<4>().0 {
+        if *alpha > 0 && *alpha < 255 {
             for channel in [r, g, b] {
                 *channel = ((u32::from(*channel) * 255 + u32::from(*alpha) / 2) / u32::from(*alpha)).min(255) as u8;
             }
