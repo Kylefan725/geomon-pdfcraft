@@ -34,40 +34,17 @@ pub enum Input {
         bytes: Vec<u8>,
     },
     #[serde(rename = "geomon-pdf:configure")]
-    Configure {
-        context: Context,
-        can_edit: bool,
-        locale: String,
-        theme: String,
-        next_version: Option<u64>,
-    },
+    Configure { context: Context, can_edit: bool, locale: String, theme: String, next_version: Option<u64> },
     #[serde(rename = "geomon-pdf:request-save")]
     RequestSave { context: Context },
     #[serde(rename = "geomon-pdf:save-result")]
-    SaveResult {
-        context: Context,
-        request_id: String,
-        ok: bool,
-        error: Option<String>,
-        revision_id: Option<u64>,
-        version: Option<u64>,
-    },
+    SaveResult { context: Context, request_id: String, ok: bool, error: Option<String>, revision_id: Option<u64>, version: Option<u64> },
     #[serde(rename = "geomon-pdf:request-point")]
-    RequestPoint {
-        context: Context,
-        request_id: String,
-    },
+    RequestPoint { context: Context, request_id: String },
     #[serde(rename = "geomon-pdf:cancel-point")]
-    CancelPoint {
-        context: Context,
-        request_id: String,
-    },
+    CancelPoint { context: Context, request_id: String },
     #[serde(rename = "geomon-pdf:select-plan")]
-    SelectPlan {
-        context: Context,
-        page_index: usize,
-        region: Option<[f64; 4]>,
-    },
+    SelectPlan { context: Context, page_index: usize, region: Option<[f64; 4]> },
 }
 
 pub type Inbox = Arc<Mutex<Vec<Input>>>;
@@ -152,18 +129,8 @@ fn valid_region(region: [f64; 4]) -> bool {
     region.iter().all(|n| n.is_finite()) && region[2] > region[0] && region[3] > region[1]
 }
 
-pub fn page_point(
-    info: &pdfcraft_render::PageInfo,
-    rect: egui::Rect,
-    view_rotation: u16,
-    at: egui::Pos2,
-) -> [f64; 2] {
-    let xf = crate::canvas::PageXform {
-        rect,
-        rot: view_rotation,
-        pw: info.width,
-        ph: info.height,
-    };
+pub fn page_point(info: &pdfcraft_render::PageInfo, rect: egui::Rect, view_rotation: u16, at: egui::Pos2) -> [f64; 2] {
+    let xf = crate::canvas::PageXform { rect, rot: view_rotation, pw: info.width, ph: info.height };
     let (x, y) = xf.screen_to_view(at);
     info.view_to_user(x, y).map(f64::from)
 }
@@ -188,10 +155,7 @@ pub fn permitted_edit(edit: &Edit) -> bool {
     matches!(
         edit,
         Edit::RotatePages { .. }
-            | Edit::SetPageBox {
-                which: pdfcraft_engine::PageBox::Crop,
-                ..
-            }
+            | Edit::SetPageBox { which: pdfcraft_engine::PageBox::Crop, .. }
             | Edit::DeleteAnnotation { .. }
             | Edit::SetAnnotationContents { .. }
             | Edit::ReplyToAnnotation { .. }
@@ -215,36 +179,18 @@ impl PdfCraftApp {
             return false;
         };
         let comments = &view.comments;
-        comments
-            .composer
-            .as_ref()
-            .is_some_and(|draft| !draft.text.trim().is_empty())
+        comments.composer.as_ref().is_some_and(|draft| !draft.text.trim().is_empty())
             || !comments.reply.trim().is_empty()
             || !comments.add_box.trim().is_empty()
-            || comments
-                .editing
-                .as_ref()
-                .is_some_and(|(page, index, text)| {
-                    self.session
-                        .get(view.id)
-                        .and_then(|doc| {
-                            doc.info
-                                .annotations
-                                .iter()
-                                .find(|a| a.page == *page && a.index == *index)
-                        })
-                        .map_or(!text.is_empty(), |a| {
-                            a.contents.as_deref().unwrap_or("") != text
-                        })
-                })
+            || comments.editing.as_ref().is_some_and(|(page, index, text)| {
+                self.session
+                    .get(view.id)
+                    .and_then(|doc| doc.info.annotations.iter().find(|a| a.page == *page && a.index == *index))
+                    .map_or(!text.is_empty(), |a| a.contents.as_deref().unwrap_or("") != text)
+            })
     }
     pub(crate) fn hosted_dirty(&self) -> bool {
-        self.first_dirty().is_some()
-            || self
-                .views
-                .iter()
-                .enumerate()
-                .any(|(index, _)| self.hosted_review_draft(index))
+        self.first_dirty().is_some() || self.views.iter().enumerate().any(|(index, _)| self.hosted_review_draft(index))
     }
     pub fn hosted_command_allowed(&self, id: &str) -> bool {
         let Some(host) = &self.hosted else {
@@ -263,16 +209,7 @@ impl PdfCraftApp {
                 | "view.previous_view"
                 | "view.next_view"
                 | "view.marquee_zoom"
-        ) || host.editable()
-            && matches!(
-                id,
-                "file.save"
-                    | "edit.undo"
-                    | "edit.redo"
-                    | "page.crop"
-                    | "page.rotate"
-                    | "page.rotate_ccw"
-            )
+        ) || host.editable() && matches!(id, "file.save" | "edit.undo" | "edit.redo" | "page.crop" | "page.rotate" | "page.rotate_ccw")
     }
     pub fn hosted_edit_allowed(&self, edit: &Edit) -> bool {
         let Some(host) = &self.hosted else {
@@ -301,12 +238,7 @@ impl PdfCraftApp {
         target.is_none_or(|(page, index)| {
             self.active_ids()
                 .and_then(|(_, id)| self.session.get(id))
-                .and_then(|doc| {
-                    doc.info
-                        .annotations
-                        .iter()
-                        .find(|a| a.page == page && a.index == index)
-                })
+                .and_then(|doc| doc.info.annotations.iter().find(|a| a.page == page && a.index == index))
                 .is_some_and(|a| {
                     !a.fill_sign
                         && matches!(
@@ -329,11 +261,7 @@ impl PdfCraftApp {
     }
     fn hosted_preferences(&mut self, locale: &str, theme: &str) {
         self.language = if locale == "zh-HK" { "zh-hant" } else { "en" }.into();
-        self.set_theme_preference(if theme == "dark" {
-            crate::theme::ThemePreference::Dark
-        } else {
-            crate::theme::ThemePreference::Light
-        });
+        self.set_theme_preference(if theme == "dark" { crate::theme::ThemePreference::Dark } else { crate::theme::ThemePreference::Light });
         self.session.set_javascript(false);
         self.recovery = None;
     }
@@ -341,11 +269,7 @@ impl PdfCraftApp {
         let Some(mut host) = self.hosted.take() else {
             return;
         };
-        let messages = host
-            .inbox
-            .lock()
-            .map(|mut q| std::mem::take(&mut *q))
-            .unwrap_or_default();
+        let messages = host.inbox.lock().map(|mut q| std::mem::take(&mut *q)).unwrap_or_default();
         let mut save_requested = false;
         for message in messages {
             match message {
@@ -356,26 +280,13 @@ impl PdfCraftApp {
                         save_requested = true;
                     }
                 }
-                Input::Open {
-                    context,
-                    name,
-                    can_edit,
-                    locale,
-                    theme,
-                    page_index,
-                    region,
-                    bytes,
-                } => {
+                Input::Open { context, name, can_edit, locale, theme, page_index, region, bytes } => {
                     if self.hosted_dirty() || host.pending {
                         continue;
                     }
                     if bytes.is_empty()
                         || bytes.len() > 100 * 1024 * 1024
-                        || (context.session_id.len() != 36
-                            || !context
-                                .session_id
-                                .bytes()
-                                .all(|b| b.is_ascii_hexdigit() || b == b'-'))
+                        || (context.session_id.len() != 36 || !context.session_id.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-'))
                         || context.document_id == 0
                         || context.revision_id == 0
                     {
@@ -396,14 +307,11 @@ impl PdfCraftApp {
                                 self.session.close(view.id);
                             }
                             if let Some(doc) = self.session.get(id) {
-                                let mut view =
-                                    crate::DocView::new(id, &doc.info, self.view_defaults);
+                                let mut view = crate::DocView::new(id, &doc.info, self.view_defaults);
                                 view.hosted = true;
                                 view.set_display(crate::canvas::PageLayout::Single, false);
                                 view.set_fit(crate::canvas::Fit::Page);
-                                view.current = page_index
-                                    .unwrap_or(0)
-                                    .min(doc.info.pages.len().saturating_sub(1));
+                                view.current = page_index.unwrap_or(0).min(doc.info.pages.len().saturating_sub(1));
                                 view.goto = Some((view.current, 0.0));
                                 self.views.push(view);
                                 self.active = Some(0);
@@ -411,21 +319,14 @@ impl PdfCraftApp {
                                 self.quick_tool = QuickTool::Select;
                                 self.left_open = false;
                                 self.right = None;
-                                host.selection =
-                                    page_index.zip(region.filter(|r| valid_region(*r)));
+                                host.selection = page_index.zip(region.filter(|r| valid_region(*r)));
                                 host.emit("loaded", json!({}), None);
                             }
                         }
                         Err(error) => host.emit("failed", json!({"error":error.to_string()}), None),
                     }
                 }
-                Input::Configure {
-                    context,
-                    can_edit,
-                    locale,
-                    theme,
-                    next_version,
-                } if host.matches(&context) => {
+                Input::Configure { context, can_edit, locale, theme, next_version } if host.matches(&context) => {
                     self.hosted_preferences(&locale, &theme);
                     host.can_edit = can_edit;
                     if !self.hosted_dirty()
@@ -440,33 +341,16 @@ impl PdfCraftApp {
                     }
                     host.emit("configured", json!({}), None);
                 }
-                Input::SaveResult {
-                    context,
-                    request_id,
-                    ok,
-                    error,
-                    revision_id,
-                    version,
-                } if host.matches(&context) => {
-                    if !host.pending
-                        || !host
-                            .attempt
-                            .as_ref()
-                            .is_some_and(|a| a.request_id == request_id)
-                    {
+                Input::SaveResult { context, request_id, ok, error, revision_id, version } if host.matches(&context) => {
+                    if !host.pending || host.attempt.as_ref().is_none_or(|a| a.request_id != request_id) {
                         continue;
                     }
                     if ok {
-                        let (Some(revision_id), Some(version)) =
-                            (revision_id.filter(|v| *v > 0), version)
-                        else {
+                        let (Some(revision_id), Some(version)) = (revision_id.filter(|v| *v > 0), version) else {
                             continue;
                         };
                         if let Some(attempt) = &host.attempt {
-                            match self
-                                .session
-                                .mark_saved(attempt.doc, attempt.bytes.clone(), None)
-                            {
+                            match self.session.mark_saved(attempt.doc, attempt.bytes.clone(), None) {
                                 Ok(()) => {
                                     if let Some(doc) = self.session.get(attempt.doc)
                                         && let Some(view) = self.views.first_mut()
@@ -488,47 +372,33 @@ impl PdfCraftApp {
                             }
                         }
                     } else {
-                        host.error = Some(error.unwrap_or_else(|| {
-                            "Save failed. Your unsaved changes are still here.".into()
-                        }));
+                        host.error = Some(error.unwrap_or_else(|| "Save failed. Your unsaved changes are still here.".into()));
                     }
                     host.pending = false;
                 }
-                Input::RequestPoint {
-                    context,
-                    request_id,
-                } if host.matches(&context) && !host.pending && !self.hosted_dirty() => {
+                Input::RequestPoint { context, request_id } if host.matches(&context) && !host.pending && !self.hosted_dirty() => {
                     host.capture = Some(request_id);
                     host.selecting = false;
                     self.quick_tool = QuickTool::Select;
                 }
-                Input::CancelPoint {
-                    context,
-                    request_id,
-                } if host.matches(&context) && host.capture.as_ref() == Some(&request_id) => {
+                Input::CancelPoint { context, request_id } if host.matches(&context) && host.capture.as_ref() == Some(&request_id) => {
                     host.capture = None;
                 }
-                Input::SelectPlan {
-                    context,
-                    page_index,
-                    region,
-                } if host.matches(&context) && !host.pending && !self.hosted_dirty() => {
+                Input::SelectPlan { context, page_index, region } if host.matches(&context) && !host.pending && !self.hosted_dirty() => {
                     if let Some((i, id)) = self.active_ids()
                         && let Some(doc) = self.session.get(id)
                         && page_index < doc.info.pages.len()
                     {
                         self.views[i].current = page_index;
                         self.views[i].goto = Some((page_index, 0.0));
-                        host.selection =
-                            region.filter(|r| valid_region(*r)).map(|r| (page_index, r));
+                        host.selection = region.filter(|r| valid_region(*r)).map(|r| (page_index, r));
                     }
                 }
                 _ => {}
             }
         }
         let dirty = self.hosted_dirty();
-        self.unsaved_flag
-            .store(dirty, std::sync::atomic::Ordering::Relaxed);
+        self.unsaved_flag.store(dirty, std::sync::atomic::Ordering::Relaxed);
         if host.dirty_reported != Some(dirty) {
             host.dirty_reported = Some(dirty);
             host.emit("dirty", json!({"dirty":dirty}), None);
@@ -572,9 +442,7 @@ impl PdfCraftApp {
             return false;
         };
         if self.active.is_some_and(|index| {
-            self.hosted_review_draft(index)
-                || self.views[index].comments.composer.is_some()
-                || self.views[index].comments.editing.is_some()
+            self.hosted_review_draft(index) || self.views[index].comments.composer.is_some() || self.views[index].comments.editing.is_some()
         }) || self.dialog.is_some()
         {
             let message = if self.language == "zh-hant" {
@@ -604,26 +472,13 @@ impl PdfCraftApp {
         let Some(host) = self.hosted.as_mut() else {
             return false;
         };
-        if !host
-            .attempt
-            .as_ref()
-            .is_some_and(|a| a.doc == id && a.generation == generation)
-        {
+        if !host.attempt.as_ref().is_some_and(|a| a.doc == id && a.generation == generation) {
             let Some(context) = &host.context else {
                 return false;
             };
             host.request_sequence += 1;
-            let request_id = format!(
-                "{}{:012x}",
-                &context.session_id[..24],
-                host.request_sequence
-            );
-            host.attempt = Some(SavedAttempt {
-                request_id,
-                generation,
-                bytes,
-                doc: id,
-            });
+            let request_id = format!("{}{:012x}", &context.session_id[..24], host.request_sequence);
+            host.attempt = Some(SavedAttempt { request_id, generation, bytes, doc: id });
         }
         host.send_save();
         false

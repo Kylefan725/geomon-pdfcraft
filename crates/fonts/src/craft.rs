@@ -326,7 +326,13 @@ mod tests {
             let len = face.bytes.len();
             let native_ui = NATIVE_UI_CJK_FAMILIES.contains(&face.family);
             assert!(!cfg!(target_arch = "wasm32") || !native_ui, "native UI face in web payload");
-            let cap = if face.family == "Noto Sans CJK HK" { 20 * 1024 * 1024 } else if native_ui { MAX_NATIVE_UI_CJK_BYTES } else { MAX_OTHER_CJK_BYTES };
+            let cap = if face.family == "Noto Sans CJK HK" {
+                20 * 1024 * 1024
+            } else if native_ui {
+                MAX_NATIVE_UI_CJK_BYTES
+            } else {
+                MAX_OTHER_CJK_BYTES
+            };
             assert!(u64::try_from(len).is_ok_and(|n| n <= cap), "{} is embedded at {len} bytes", face.name());
         }
         let bytes: usize = whole.iter().map(|f| f.bytes.len()).sum();
