@@ -86,7 +86,11 @@ jobs:
       # A missing oracle fails the job instead of printing a skip notice that reads as a pass.
       linux-env: PDFCRAFT_ORACLES_REQUIRED=1
       windows-env: PDFCRAFT_REQUIRE_WINRES=1
+      command: |
+        python3 xtask/prepare-geomon-test-font.py
+        cargo xtask ci
       # Windows checks what differs by platform: the build (with resources) and the tests.
       windows-command: |
+        python3 xtask/prepare-geomon-test-font.py
         cargo clippy --workspace --all-targets --locked -- -D warnings
         cargo test --workspace --locked
