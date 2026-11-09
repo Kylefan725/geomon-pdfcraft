@@ -1,4 +1,6 @@
 use super::{PdfCraftApp, StagingName, staging_suffixes};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::file_filter::AddFilterAnyCase as _;
 
 /// A save held back by [`Dialog::OverwriteChanged`](crate::Dialog::OverwriteChanged): the file
 /// on disk is another version than the document came from (#2166).
@@ -39,7 +41,9 @@ impl PdfCraftApp {
     /// [`Self::save_view`], then `after` once the document is written: now, or on a later frame
     /// when the user had to choose where. `after` never runs when the save fails or is cancelled.
     pub(crate) fn save_then(&mut self, index: usize, target: SaveTarget, after: impl FnOnce(&mut Self) + Send + 'static) -> bool {
-        if self.hosted.is_some() { return self.hosted_save(); }
+        if self.hosted.is_some() {
+            return self.hosted_save();
+        }
         // What's typed in a field is part of what's saved (#166).
         if let Some(id) = self.views.get(index).map(|v| v.id)
             && !self.commit_typing_in(id)
@@ -59,7 +63,7 @@ impl PdfCraftApp {
                 (SaveTarget::InPlace, Some(p), _) if !is_mail_temp_copy(&p) => p,
                 _ => {
                     let name = if name.to_ascii_lowercase().ends_with(".pdf") { name } else { format!("{name}.pdf") };
-                    let dialog = rfd::AsyncFileDialog::new().add_filter("PDF", &["pdf"]).set_file_name(name);
+                    let dialog = rfd::AsyncFileDialog::new().add_filter_any_case("PDF", &["pdf"]).set_file_name(name);
                     let dialog = in_document_folder(dialog, doc_path.as_deref());
                     // The bytes are taken once the user has chosen, so edits made meanwhile are saved too.
                     self.ask_one(crate::pickers::Ask::Save(dialog), None, move |app, dest| {

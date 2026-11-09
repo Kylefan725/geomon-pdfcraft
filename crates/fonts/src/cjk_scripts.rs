@@ -52,7 +52,9 @@ pub fn cjk_cap_bytes(family: &str, wasm: bool) -> u64 {
 /// `required` marks the native Simplified Chinese manifest of a `CRAFT_FONTS_REQUIRED` build,
 /// where an over-cap face must fail instead of quietly disappearing.
 pub fn cjk_size_decision(family: &str, bytes: u64, wasm: bool, required: bool) -> CjkSizeDecision {
-    if family == "Noto Sans CJK HK" && bytes <= 20 * 1024 * 1024 { return CjkSizeDecision::Embed; }
+    if family == "Noto Sans CJK HK" && bytes <= 20 * 1024 * 1024 {
+        return CjkSizeDecision::Embed;
+    }
     if WHOLE_CJK_FAMILIES.contains(&family) {
         return CjkSizeDecision::Embed;
     }

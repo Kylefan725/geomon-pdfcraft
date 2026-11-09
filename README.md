@@ -2,7 +2,7 @@
 
 GeoMonNext's embedded PDF viewer and native processor, based on
 [PDFCraft](https://github.com/storytold/pdfcraft) revision
-`47f42ba07b61553da50ca2df91b070519bd3386e`.
+`2ef2e2b82286acbf4c1ff72fcb7a82ef52fe7a54`.
 
 This branch carries the existing GeoMonNext integration as ordinary Rust source.
 It preserves the hosted viewer's permissions, save acknowledgement, review tools,
@@ -19,7 +19,8 @@ revision, supplies the pinned font input, and packages the native and browser
 applications. The browser protocol remains version 2.
 
 Build with Rust 1.95.0. Set `CRAFT_FONTS_DIR` to the font input prepared by the
-GeoMonNext build and set `PDFCRAFT_SYSTEM_FONTS=0` to use the same fonts in tests.
+GeoMonNext build, set `CRAFT_I18N_DIR` to the catalog checkout pinned in
+`craft-i18n.rev`, and set `PDFCRAFT_SYSTEM_FONTS=0` to use the same fonts in tests.
 
 ```sh
 cargo +1.95.0 build --locked --release -p geomon-pdf

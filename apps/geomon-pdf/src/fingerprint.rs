@@ -21,20 +21,10 @@ const REVIEW_TYPES: &[&[u8]] = &[
 ];
 
 pub fn drawing(document: &Document, pages: &[Page]) -> Result<[u8; 32]> {
-    let mut walker = Fingerprint {
-        document,
-        hash: Sha256::new(),
-        seen: HashSet::new(),
-        remaining: 200_000,
-        bytes: 256 * 1024 * 1024,
-    };
-    let root = document
-        .root()
-        .ok_or_else(|| invalid("PDF catalog missing."))?;
+    let mut walker = Fingerprint { document, hash: Sha256::new(), seen: HashSet::new(), remaining: 200_000, bytes: 256 * 1024 * 1024 };
+    let root = document.root().ok_or_else(|| invalid("PDF catalog missing."))?;
     let catalog = document.get(root);
-    let catalog = catalog
-        .as_dict()
-        .ok_or_else(|| invalid("PDF catalog is not a dictionary."))?;
+    let catalog = catalog.as_dict().ok_or_else(|| invalid("PDF catalog is not a dictionary."))?;
     walker.dictionary(catalog, &[b"Pages", b"Metadata"], 0)?;
     for page in pages {
         walker.add(&page.obj.num.to_be_bytes())?;
@@ -55,10 +45,7 @@ struct Fingerprint<'a> {
 
 impl Fingerprint<'_> {
     fn add(&mut self, bytes: &[u8]) -> Result<()> {
-        self.bytes = self
-            .bytes
-            .checked_sub(bytes.len())
-            .ok_or_else(|| invalid("PDF verification byte budget exceeded."))?;
+        self.bytes = self.bytes.checked_sub(bytes.len()).ok_or_else(|| invalid("PDF verification byte budget exceeded."))?;
         self.hash.update((bytes.len() as u64).to_be_bytes());
         self.hash.update(bytes);
         Ok(())
@@ -66,11 +53,8 @@ impl Fingerprint<'_> {
 
     fn dictionary(&mut self, dict: &Dict, skipped: &[&[u8]], depth: usize) -> Result<()> {
         self.add(b"dict")?;
-        let mut entries: Vec<_> = dict
-            .iter()
-            .filter(|(key, _)| !skipped.contains(&key.as_slice()))
-            .collect();
-        entries.sort_by(|(a, _), (b, _)| a.cmp(b));
+        let mut entries: Vec<_> = dict.iter().filter(|(key, _)| !skipped.contains(&key.as_slice())).collect();
+        entries.sort_by_key(|(a, _)| *a);
         for (key, value) in entries {
             self.add(key)?;
             self.object(value, depth + 1)?;
@@ -84,21 +68,12 @@ impl Fingerprint<'_> {
             return Ok(());
         };
         let value = self.document.resolve(value);
-        let array = value
-            .as_array()
-            .ok_or_else(|| invalid("PDF annotations could not be verified."))?;
+        let array = value.as_array().ok_or_else(|| invalid("PDF annotations could not be verified."))?;
         for value in array {
             let resolved = self.document.resolve(value);
-            let dict = resolved
-                .as_dict()
-                .ok_or_else(|| invalid("PDF annotation could not be verified."))?;
-            let subtype = dict
-                .get(b"Subtype")
-                .map(|value| self.document.resolve(value));
-            let allowed = subtype
-                .as_deref()
-                .and_then(Object::as_name)
-                .is_some_and(|name| REVIEW_TYPES.contains(&name));
+            let dict = resolved.as_dict().ok_or_else(|| invalid("PDF annotation could not be verified."))?;
+            let subtype = dict.get(b"Subtype").map(|value| self.document.resolve(value));
+            let allowed = subtype.as_deref().and_then(Object::as_name).is_some_and(|name| REVIEW_TYPES.contains(&name));
             if allowed && !dict.contains(b"A") && !dict.contains(b"AA") {
                 continue;
             }
@@ -111,10 +86,7 @@ impl Fingerprint<'_> {
         if depth > 128 {
             return Err(invalid("PDF verification graph is too deep."));
         }
-        self.remaining = self
-            .remaining
-            .checked_sub(1)
-            .ok_or_else(|| invalid("PDF verification object budget exceeded."))?;
+        self.remaining = self.remaining.checked_sub(1).ok_or_else(|| invalid("PDF verification object budget exceeded."))?;
         match value {
             Object::Null => self.add(b"null"),
             Object::Bool(value) => self.add(if *value { b"true" } else { b"false" }),
@@ -127,14 +99,7 @@ impl Fingerprint<'_> {
                     return Err(invalid("PDF verification found a non-finite number."));
                 }
                 self.add(b"number")?;
-                self.add(
-                    if *value == 0.0 {
-                        "0".into()
-                    } else {
-                        value.to_string()
-                    }
-                    .as_bytes(),
-                )
+                self.add(if *value == 0.0 { "0".into() } else { value.to_string() }.as_bytes())
             }
             Object::Name(value) => {
                 self.add(b"name")?;

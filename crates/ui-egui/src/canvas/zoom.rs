@@ -256,7 +256,9 @@ impl DocView {
         if self.cover { c.saturating_sub((c + 1) % 2) } else { c - c % 2 }
     }
 
-    fn side_gutter(&self) -> f32 { if self.hosted { 12.0 } else { SIDE } }
+    fn side_gutter(&self) -> f32 {
+        if self.hosted { 12.0 } else { SIDE }
+    }
 
     pub(super) fn fit_zoom(&mut self, info: &DocInfo) {
         let largest = |side: fn((f32, f32)) -> f32| info.pages.iter().map(|p| side(self.display_size(p))).fold(1.0, f32::max);
@@ -339,7 +341,11 @@ impl DocView {
                     let sizes: Vec<Vec2> = pair.iter().map(page_size).collect();
                     let row_w: f32 = sizes.iter().map(|v| v.x).sum::<f32>() + gap * (sizes.len() as f32 - 1.0);
                     let row_h = sizes.iter().map(|v| v.y).fold(0.0, f32::max);
-                    let mut x = if self.cover && ri == 0 { (content_w / 2.0 + gap / 2.0).max(self.side_gutter()) } else { ((content_w - row_w) / 2.0).max(self.side_gutter()) };
+                    let mut x = if self.cover && ri == 0 {
+                        (content_w / 2.0 + gap / 2.0).max(self.side_gutter())
+                    } else {
+                        ((content_w - row_w) / 2.0).max(self.side_gutter())
+                    };
                     for size in sizes {
                         rects.push(Rect::from_min_size(pos2(x, y + (row_h - size.y) / 2.0), size));
                         x += size.x + gap;

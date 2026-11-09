@@ -27,3 +27,6 @@ jobs:
     uses: storytold/craft-common-actions/.github/workflows/freebsd.yml@main
     with:
       craft-fonts-ref: b076417b5880bd4154bd22f00695b1d28c6bea83
+      custom-test-command: |
+        python3 xtask/prepare-geomon-test-font.py
+        CARGO_PROFILE_DEV_DEBUG=0 cargo test --workspace --locked
